@@ -15,6 +15,11 @@ library(FinCal)
 library(scales)
 library(shinyWidgets)
 
+# Add to your app.R
+install.packages(c("munsell", "RColorBrewer", "viridisLite"))
+library(ggplot2)
+
+
 # Authentication setup - simple password protection
 user_base <- data.frame(
   user = "mcf",
@@ -61,7 +66,7 @@ ui <- dashboardPage(
         # Investment Analysis Tab
         tabItem(tabName = "analysis",
           fluidRow(
-            box(
+            shinydashboard::box(
               title = "Investment Parameters", status = "primary", solidHeader = TRUE, width = 6,
 
               # Purchase Price Slider
@@ -98,7 +103,7 @@ ui <- dashboardPage(
               )
             ),
 
-            box(
+            shinydashboard::box(
               title = "Operating Costs", status = "primary", solidHeader = TRUE, width = 6,
 
               # Rent
@@ -140,7 +145,7 @@ ui <- dashboardPage(
           ),
 
           fluidRow(
-            box(
+            shinydashboard::box(
               title = "Analysis Assumptions", status = "primary", solidHeader = TRUE, width = 12,
 
               sliderInput("discount_rate",
@@ -155,26 +160,26 @@ ui <- dashboardPage(
                           "Valor terminal:",
                           min = 0, max = 250000, value = 10000, step = 1000)
             ),
-              box(title = "Analyze", status = "primary", solidHeader = TRUE, width = 12,
+              shinydashboard::box(title = "Analyze", status = "primary", solidHeader = TRUE, width = 12,
               actionButton("calculate", "Calculate Investment Metrics",
                           class = "btn-success", style = "margin-top: 10px;")
             )
           ),
 
           fluidRow(
-            box(
+            shinydashboard::box(
               title = "Investment Metrics", status = "warning", solidHeader = TRUE, width = 6,
               DT::dataTableOutput("metrics_table")
             ),
 
-            box(
+            shinydashboard::box(
               title = "Cash Flow Analysis", status = "warning", solidHeader = TRUE, width = 6,
               plotlyOutput("cashflow_plot")
             )
           ),
 
           fluidRow(
-            box(
+            shinydashboard::box(
               title = "Key Assumptions Used", status = "warning", solidHeader = TRUE, width = 12,
               verbatimTextOutput("assumptions_summary")
             )
