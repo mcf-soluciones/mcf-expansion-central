@@ -1,0 +1,10 @@
+name: mcf-expansion-central
+title:
+username: mcfsoluciones
+account: mcfsoluciones
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14949872
+bundleId: 10489917
+url: https://mcfsoluciones.shinyapps.io/mcf-expansion-central/
+version: 1

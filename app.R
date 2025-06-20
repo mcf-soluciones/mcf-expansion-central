@@ -14,9 +14,10 @@ library(readr)
 library(FinCal)
 library(scales)
 library(shinyWidgets)
+library(jsonlite)
 
 # Add to your app.R
-install.packages(c("munsell", "RColorBrewer", "viridisLite"))
+# install.packages(c("munsell", "RColorBrewer", "viridisLite"))
 library(ggplot2)
 
 
@@ -181,7 +182,8 @@ ui <- dashboardPage(
           fluidRow(
             shinydashboard::box(
               title = "Key Assumptions Used", status = "warning", solidHeader = TRUE, width = 12,
-              verbatimTextOutput("assumptions_summary")
+              verbatimTextOutput("assumptions_summary"),
+              downloadButton("download_json", "Download JSON")
             )
           )
 
@@ -218,10 +220,9 @@ server <- function(input, output, session) {
     if (values$authenticated) {
       return(paste0("Logged in: ",Sys.time() ))
     } else {
-      return("")
+      return(" <- Log in using hamburger menu.")
     }
   })
-
 
 
   output$pl_preview <- DT::renderDataTable({
@@ -312,10 +313,12 @@ server <- function(input, output, session) {
     cash_on_cash_return <- ifelse(total_cash_invested > 0, annual_return / total_cash_invested, 0)
 
     # Payback period
-    cumulative_cash_flow <- cumsum(cash_flows)
-    payback_period <- ifelse(any(cumulative_cash_flow >= down_payment),
-                            which(cumulative_cash_flow >= down_payment)[1],
-                            NA)
+    payback_period <- down_payment/annual_cash_flow
+
+    # cumulative_cash_flow <- cumsum(cash_flows)
+    # payback_period <- ifelse(any(cumulative_cash_flow >= down_payment),
+    #                        which(cumulative_cash_flow >= down_payment)[1],
+    #                        NA)
 
     # ROI calculation
     total_profit <- sum(cash_flows[-1])  # Exclude initial investment
@@ -326,7 +329,7 @@ server <- function(input, output, session) {
       npv = npv,
       irr = ifelse(is.na(irr_result), "Unable to calculate", paste0(round(irr_result * 100, 2), "%")),
       cash_on_cash = paste0(round(cash_on_cash_return * 100, 2), "%"),
-      payback_period = ifelse(is.na(payback_period), "Never", paste(payback_period, "years")),
+      payback_period = ifelse(is.na(payback_period), "Never", paste(round(payback_period,2), "years")),
       roi = paste0(round(roi, 2), "%"),
       annual_cash_flow = annual_cash_flow,
       annual_net_income = annual_net_income,
@@ -452,6 +455,20 @@ server <- function(input, output, session) {
       "
     )
   })
+
+  output$download_json <- downloadHandler(
+    filename = function() { "investment_data.json" },
+    content = function(file) {
+
+      req(investment_results())
+      results <- investment_results()
+
+      data_to_export <- list(
+        analysis = results
+      )
+      jsonlite::write_json(data_to_export, path = file, pretty = TRUE, auto_unbox = TRUE)
+    }
+  )
 }
 
 # Run the application
