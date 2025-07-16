@@ -1,7 +1,5 @@
-
 # Laundromat Investment Analysis Shiny App
-# Author: AI Assistant
-# Date: 2025-06-12
+# Version: 2025-07-15
 
 # Load required libraries
 library(shiny)
@@ -50,7 +48,8 @@ ui <- dashboardPage(
     conditionalPanel(
       condition = "output.authenticated == true",
       sidebarMenu(
-        menuItem("Investment Analysis", tabName = "analysis", icon = icon("calculator"))
+        menuItem("Investment Analysis", tabName = "analysis", icon = icon("calculator")),
+        menuItem("Monthly Cash Flow", tabName = "monthly_cash_flow", icon = icon("chart-bar"))
       )
     )
   ),
@@ -68,6 +67,11 @@ ui <- dashboardPage(
         tabItem(tabName = "analysis",
           fluidRow(
             shinydashboard::box(
+              title = "Load Pre-defined Scenario", status = "primary", solidHeader = TRUE, width = 12,
+              selectInput("scenario_name", "Select Scenario:", choices = NULL), # Choices will be set in server
+              actionButton("load_scenario", "Load Scenario", class = "btn-primary")
+            ),
+            shinydashboard::box(
               title = "Investment Parameters", status = "primary", solidHeader = TRUE, width = 6,
 
               # Purchase Price Slider
@@ -84,7 +88,7 @@ ui <- dashboardPage(
               # Down Payment Percentage
               sliderInput("down_payment_pct",
                          "Down Payment (%):",
-                         min = 10, max = 100, value = 30, step = 5, post = "%"),
+                         min = 10, max = 100, value = 50, step = 5, post = "%"),
 
               # Interest Rate
               sliderInput("interest_rate",
@@ -122,7 +126,7 @@ ui <- dashboardPage(
               # fixed costs
               sliderInput("monthly_fixed",
                           "(G+H) Monthly Fixed Costs (€):",
-                          min = 100, max = 3000, value = 1000, step = 50,
+                          min = 100, max = 3000, value = 900, step = 50,
                           pre = "€", sep = ","),
 
               # Maintenance
@@ -187,6 +191,28 @@ ui <- dashboardPage(
             )
           )
 
+        ),
+        # Monthly Cash Flow Tab
+        tabItem(tabName = "monthly_cash_flow",
+          fluidRow(
+            shinydashboard::box(
+              title = "Cash Flow Assumptions", status = "primary", solidHeader = TRUE, width = 12,
+              sliderInput("inflation_rate",
+                          "Annual Inflation Rate (%):",
+                          min = 0, max = 10, value = 2, step = 0.1, post = "%"),
+              sliderInput("price_increase_rate",
+                          "Annual Price Increase Rate (%):",
+                          min = 0, max = 10, value = 3, step = 0.1, post = "%"),
+              actionButton("recalculate_cashflow", "Re-calculate", class = "btn-success", style = "margin-top: 10px;"), 
+              helpText("No incluye gastos por depreciación, que son fiscales pero no de flujo.")
+            )
+          ),
+          fluidRow(
+            shinydashboard::box(
+              title = "Monthly Cash Flow Chart", status = "warning", solidHeader = TRUE, width = 12,
+              plotlyOutput("monthly_cashflow_plot", height = "600px")
+            )
+          )
         )
       )
     )
@@ -195,6 +221,9 @@ ui <- dashboardPage(
 
 # Define Server
 server <- function(input, output, session) {
+
+  # source("data_fetchers.R")   # wrappers you will edit
+
 
   # Authentication logic
   values <- reactiveValues(authenticated = FALSE)
@@ -224,15 +253,67 @@ server <- function(input, output, session) {
     }
   })
 
+  # Pre-defined investment scenarios
+  predefined_investments <- data.frame(
+    name = c("Default", "Usera", "Hortaleza"),
+    purchase_price = c(60000, 81000, 55000),
+    annual_sales = c(50000, 78000, 60000),
+    down_payment_pct = c(100, 100, 100),
+    interest_rate = c(5, 5, 5),
+    loan_term = c(5, 5, 5),
+    monthly_rent = c(800, 650, 1030),
+    monthly_utilities = c(1000, 1100, 1000),
+    monthly_fixed = c(1000, 400, 500),
+    annual_maintenance = c(2500, 2000, 1600),
+    annual_corp = c(100, 300, 400),
+    annual_depreciation = c(3000, 2000, 1800),
+    discount_rate = c(6, 6, 6),
+    analysis_period = c(5, 5, 5),
+    terminal_value = c(25000, 23000, 17000)
+  )
+
+  # Update scenario choices
+  updateSelectInput(session, "scenario_name", choices = predefined_investments$name)
+
+  # Load scenario logic
+  observeEvent(input$load_scenario, {
+    selected_scenario <- predefined_investments[predefined_investments$name == input$scenario_name, ]
+
+    updateSliderInput(session, "purchase_price", value = selected_scenario$purchase_price)
+    updateNumericInput(session, "annual_sales", value = selected_scenario$annual_sales)
+    updateSliderInput(session, "down_payment_pct", value = selected_scenario$down_payment_pct)
+    updateSliderInput(session, "interest_rate", value = selected_scenario$interest_rate)
+    updateSliderInput(session, "loan_term", value = selected_scenario$loan_term)
+    updateSliderInput(session, "monthly_rent", value = selected_scenario$monthly_rent)
+    updateSliderInput(session, "monthly_utilities", value = selected_scenario$monthly_utilities)
+    updateSliderInput(session, "monthly_fixed", value = selected_scenario$monthly_fixed)
+    updateSliderInput(session, "annual_maintenance", value = selected_scenario$annual_maintenance)
+    updateSliderInput(session, "annual_corp", value = selected_scenario$annual_corp)
+    updateSliderInput(session, "annual_depreciation", value = selected_scenario$annual_depreciation)
+    updateSliderInput(session, "discount_rate", value = selected_scenario$discount_rate)
+    updateSliderInput(session, "analysis_period", value = selected_scenario$analysis_period)
+    updateSliderInput(session, "terminal_value", value = selected_scenario$terminal_value)
+  })
 
   output$pl_preview <- DT::renderDataTable({
     req(pl_data())
     DT::datatable(head(pl_data(), 100), options = list(scrollX = TRUE))
   })
 
-  # Calculate investment metrics
-  investment_results <- eventReactive(input$calculate, {
+  # Reactive value to trigger calculations
+  trigger_calculation <- reactiveVal(0)
 
+  observeEvent(input$calculate, {
+    trigger_calculation(trigger_calculation() + 1)
+  })
+
+  observeEvent(input$recalculate_cashflow, {
+    trigger_calculation(trigger_calculation() + 1)
+  })
+
+  # Calculate investment metrics
+  investment_results <- reactive({
+    req(trigger_calculation() > 0)
     # Extract inputs
     purchase_price <- input$purchase_price
     annual_sales <- input$annual_sales
@@ -469,7 +550,113 @@ server <- function(input, output, session) {
       jsonlite::write_json(data_to_export, path = file, pretty = TRUE, auto_unbox = TRUE)
     }
   )
+
+
+
+
+
+  # Monthly Cash Flow Calculation
+  monthly_cash_flow_results <- reactive({
+    req(trigger_calculation() > 0)
+    req(investment_results())
+
+    # Get results from the main calculation
+    results <- investment_results()
+    assumptions <- results$assumptions
+    analysis_period_years <- input$analysis_period
+    total_months <- analysis_period_years * 12
+
+    # Get inflation/price increase rates
+    inflation_rate <- input$inflation_rate / 100
+    price_increase_rate <- input$price_increase_rate / 100
+
+    # Initial monthly values
+    sales_proportions <- c(0.13, 0.12, 0.11, 0.10,0.09,0.03,0.02,0.01,0.02,0.10,0.13,0.14) # Summing to 1
+    utilities_proportions <- c(0.12, 0.12, 0.12, 0.10,0.08,0.03,0.02,0.02,0.02,0.11,0.12,0.14) # Summing to 1
+
+    monthly_sales <- (assumptions$annual_sales * sales_proportions)
+    monthly_rent <- assumptions$annual_rent / 12
+    monthly_utilities <- (assumptions$annual_utilities * utilities_proportions)
+    monthly_maintenance <- assumptions$annual_maintenance / 12
+    monthly_fixed <- assumptions$annual_fixed / 12
+    monthly_corp <- assumptions$annual_corp / 12
+    monthly_depreciation <- assumptions$annual_depreciation / 12
+
+    # Monthly debt service
+    monthly_debt_service <- results$debt_service / 12
+
+    # Initialize vectors to store monthly data
+    sales_vec <- numeric(total_months)
+    costs_vec <- numeric(total_months)
+    cash_flow_vec <- numeric(total_months)
+
+    current_year <- 1
+    for (month in 1:total_months) {
+      # Determine the current year for applying annual adjustments
+      if (month > 1 && (month - 1) %% 12 == 0) {
+        current_year <- current_year + 1
+      }
+
+      # Get the index for the current month (1-12)
+      month_index <- (month - 1) %% 12 + 1
+
+      # Adjust sales and costs annually
+      # Sales increase based on price_increase_rate
+      current_monthly_sales <- monthly_sales[month_index] * ((1 + price_increase_rate)^(current_year - 1))
+
+      # Costs increase based on inflation_rate (excluding depreciation and debt service)
+      current_monthly_rent <- monthly_rent * ((1 + inflation_rate)^(current_year - 1))
+      current_monthly_utilities <- monthly_utilities[month_index] * ((1 + inflation_rate)^(current_year - 1))
+      current_monthly_maintenance <- monthly_maintenance * ((1 + inflation_rate)^(current_year - 1))
+      current_monthly_fixed <- monthly_fixed * ((1 + inflation_rate)^(current_year - 1))
+      current_monthly_corp <- monthly_corp * ((1 + inflation_rate)^(current_year - 1))
+
+      # Total monthly costs
+      total_monthly_costs <- current_monthly_rent + current_monthly_utilities +
+                             current_monthly_maintenance + current_monthly_fixed +
+                             current_monthly_corp 
+      ## we are not contemplating depreciation
+      
+      # Calculate monthly cash flow
+      net_income_before_debt <- current_monthly_sales - total_monthly_costs
+      monthly_cash_flow <- net_income_before_debt - monthly_debt_service
+
+      # Store results
+      sales_vec[month] <- current_monthly_sales
+      costs_vec[month] <- total_monthly_costs
+      cash_flow_vec[month] <- monthly_cash_flow
+    }
+
+    # Create a data frame for plotting
+    month_labels <- format(seq.Date(from = as.Date("2025-01-01"), by = "month", length.out = total_months), "%b %Y")
+
+    plot_data <- data.frame(
+      Month = factor(month_labels, levels = month_labels),
+      CashFlow = cash_flow_vec,
+      Color = ifelse(cash_flow_vec >= 0, "green", "red")
+    )
+
+    return(plot_data)
+  })
+
+  # Render Monthly Cash Flow Plot
+  output$monthly_cashflow_plot <- renderPlotly({
+    req(monthly_cash_flow_results())
+
+    plot_data <- monthly_cash_flow_results()
+
+    p <- plot_ly(plot_data, x = ~Month, y = ~CashFlow, type = 'bar',
+                 marker = list(color = ~Color)) %>%
+      layout(title = "Projected Monthly Cash Flow",
+             xaxis = list(title = "Month", tickangle = -45),
+             yaxis = list(title = "Cash Flow (€)"),
+             hovermode = 'x')
+
+    return(p)
+  })
 }
+
+
 
 # Run the application
 shinyApp(ui = ui, server = server)
