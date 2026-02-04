@@ -1,28 +1,237 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shiny App</title>
-    <script
-      src="./shinylive/load-shinylive-sw.js"
-      type="module"
-    ></script>
-    <script type="module">
-      import { runExportedApp } from "./shinylive/shinylive.js";
-      runExportedApp({
-        id: "root",
-        appEngine: "r",
-        relPath: "",
-      });
-    </script>
-    <link rel="stylesheet" href="./shinylive/style-resets.css" />
-    <link rel="stylesheet" href="./shinylive/shinylive.css" />
-    
-  </head>
-  <body>
-    
-    <div style="height: 100vh; width: 100vw" id="root"></div>
-    
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCF Expansion</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+
+<!-- Login Overlay -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h2>MCF Expansion</h2>
+    <h3>Authentication Required</h3>
+    <label for="username">Username:</label>
+    <input type="text" id="username" autocomplete="username">
+    <label for="password">Password:</label>
+    <input type="password" id="password" autocomplete="current-password">
+    <button id="login-btn" class="btn btn-primary">Login</button>
+    <div id="login-error" class="hidden">Invalid username or password!</div>
+  </div>
+</div>
+
+<!-- Main App (hidden until authenticated) -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <header class="dashboard-header">
+    <span class="header-title">MCF Expansion</span>
+    <span id="auth-status" class="header-status"></span>
+  </header>
+
+  <!-- Sidebar + Body -->
+  <div class="dashboard-wrapper">
+    <nav class="sidebar">
+      <ul>
+        <li><a href="#" class="nav-link active" data-tab="analysis">&#128200; Investment Analysis</a></li>
+        <li><a href="#" class="nav-link" data-tab="monthly_cash_flow">&#128202; Monthly Cash Flow</a></li>
+      </ul>
+    </nav>
+
+    <main class="dashboard-body">
+
+      <!-- ======================== TAB 1: Investment Analysis ======================== -->
+      <section id="tab-analysis" class="tab-content active">
+
+        <!-- Row 1: Scenario Loader -->
+        <div class="row">
+          <div class="box box-full box-primary">
+            <div class="box-header">Load Pre-defined Scenario</div>
+            <div class="box-body inline-controls">
+              <div class="control-group">
+                <label for="scenario_name">Select Scenario:</label>
+                <select id="scenario_name">
+                  <option value="Default">Default</option>
+                  <option value="Usera">Usera</option>
+                  <option value="Hortaleza">Hortaleza</option>
+                </select>
+              </div>
+              <button id="load_scenario" class="btn btn-primary">Load Scenario</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Investment Parameters + Operating Costs -->
+        <div class="row">
+          <div class="box box-half box-primary">
+            <div class="box-header">Investment Parameters</div>
+            <div class="box-body">
+              <div class="control-group">
+                <label for="purchase_price">Purchase Price (€): <span class="slider-val" id="purchase_price_val">€60,000</span></label>
+                <input type="range" id="purchase_price" min="10000" max="200000" value="60000" step="1000">
+              </div>
+              <div class="control-group">
+                <label for="annual_sales">(A+B) Expected Annual Sales (€):</label>
+                <input type="number" id="annual_sales" value="50000" min="25000" max="200000" step="1000">
+              </div>
+              <div class="control-group">
+                <label for="down_payment_pct">Down Payment (%): <span class="slider-val" id="down_payment_pct_val">50%</span></label>
+                <input type="range" id="down_payment_pct" min="10" max="100" value="50" step="5">
+              </div>
+              <div class="control-group">
+                <label for="interest_rate">Loan Interest Rate (%): <span class="slider-val" id="interest_rate_val">6%</span></label>
+                <input type="range" id="interest_rate" min="0" max="20" value="6" step="0.05">
+              </div>
+              <div class="control-group">
+                <label for="loan_term">Loan Term (years): <span class="slider-val" id="loan_term_val">5</span></label>
+                <input type="range" id="loan_term" min="1" max="25" value="5" step="1">
+              </div>
+              <div class="control-group">
+                <h4>Include tax impact?</h4>
+                <label class="switch">
+                  <input type="checkbox" id="tax_toggle">
+                  <span class="switch-slider"></span>
+                </label>
+                <span class="switch-label">Yes</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="box box-half box-primary">
+            <div class="box-header">Operating Costs</div>
+            <div class="box-body">
+              <div class="control-group">
+                <label for="monthly_rent">(C) Monthly Rent (€): <span class="slider-val" id="monthly_rent_val">€800</span></label>
+                <input type="range" id="monthly_rent" min="300" max="3000" value="800" step="20">
+              </div>
+              <div class="control-group">
+                <label for="monthly_utilities">(E+F) Monthly Variable (€): <span class="slider-val" id="monthly_utilities_val">€1,000</span></label>
+                <input type="range" id="monthly_utilities" min="100" max="3000" value="1000" step="50">
+              </div>
+              <div class="control-group">
+                <label for="monthly_fixed">(G+H) Monthly Fixed Costs (€): <span class="slider-val" id="monthly_fixed_val">€900</span></label>
+                <input type="range" id="monthly_fixed" min="100" max="3000" value="900" step="50">
+              </div>
+              <div class="control-group">
+                <label for="annual_maintenance">(I) Annual Maintenance (€): <span class="slider-val" id="annual_maintenance_val">€2,500</span></label>
+                <input type="range" id="annual_maintenance" min="0" max="30000" value="2500" step="200">
+              </div>
+              <div class="control-group">
+                <label for="annual_corp">(J) Annual Corp Costs (€): <span class="slider-val" id="annual_corp_val">€100</span></label>
+                <input type="range" id="annual_corp" min="0" max="5000" value="100" step="50">
+              </div>
+              <div class="control-group">
+                <label for="annual_depreciation">(O) Annual Equipment Depreciation (€): <span class="slider-val" id="annual_depreciation_val">€3,000</span></label>
+                <input type="range" id="annual_depreciation" min="0" max="30000" value="3000" step="500">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Analysis Assumptions -->
+        <div class="row">
+          <div class="box box-full box-primary">
+            <div class="box-header">Analysis Assumptions</div>
+            <div class="box-body">
+              <div class="control-group">
+                <label for="discount_rate">Discount Rate for NPV (%): <span class="slider-val" id="discount_rate_val">5%</span></label>
+                <input type="range" id="discount_rate" min="1" max="15" value="5" step="0.5">
+              </div>
+              <div class="control-group">
+                <label for="analysis_period">Analysis Period (years): <span class="slider-val" id="analysis_period_val">5</span></label>
+                <input type="range" id="analysis_period" min="2" max="20" value="5" step="1">
+              </div>
+              <div class="control-group">
+                <label for="terminal_value">Valor terminal: <span class="slider-val" id="terminal_value_val">€10,000</span></label>
+                <input type="range" id="terminal_value" min="0" max="250000" value="10000" step="1000">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 4: Analyze button -->
+        <div class="row">
+          <div class="box box-full box-primary">
+            <div class="box-header">Analyze</div>
+            <div class="box-body">
+              <button id="calculate" class="btn btn-success">Calculate Investment Metrics</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 5: Metrics Table + Cash Flow Chart -->
+        <div class="row" id="results-row">
+          <div class="box box-half box-warning">
+            <div class="box-header">Investment Metrics</div>
+            <div class="box-body">
+              <table id="metrics_table" class="metrics-table">
+                <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+                <tbody>
+                  <tr><td colspan="2" class="placeholder-text">Click "Calculate Investment Metrics" to see results.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="box box-half box-warning">
+            <div class="box-header">Cash Flow Analysis</div>
+            <div class="box-body">
+              <div id="cashflow_plot" class="chart-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 6: Assumptions -->
+        <div class="row" id="assumptions-row">
+          <div class="box box-full box-warning">
+            <div class="box-header">Key Assumptions Used</div>
+            <div class="box-body">
+              <pre id="assumptions_summary" class="assumptions-text">Click "Calculate Investment Metrics" to see assumptions.</pre>
+              <button id="download_json" class="btn btn-default">Download JSON</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================== TAB 2: Monthly Cash Flow ======================== -->
+      <section id="tab-monthly_cash_flow" class="tab-content">
+
+        <div class="row">
+          <div class="box box-full box-primary">
+            <div class="box-header">Cash Flow Assumptions</div>
+            <div class="box-body">
+              <div class="control-group">
+                <label for="inflation_rate">Annual Inflation Rate (%): <span class="slider-val" id="inflation_rate_val">2%</span></label>
+                <input type="range" id="inflation_rate" min="0" max="10" value="2" step="0.1">
+              </div>
+              <div class="control-group">
+                <label for="price_increase_rate">Annual Price Increase Rate (%): <span class="slider-val" id="price_increase_rate_val">3%</span></label>
+                <input type="range" id="price_increase_rate" min="0" max="10" value="3" step="0.1">
+              </div>
+              <button id="recalculate_cashflow" class="btn btn-success">Re-calculate</button>
+              <p class="help-text">No incluye gastos por depreciación, que son fiscales pero no de flujo.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="box box-full box-warning">
+            <div class="box-header">Monthly Cash Flow Chart</div>
+            <div class="box-body">
+              <div id="monthly_cashflow_plot" class="chart-container chart-tall"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="js/calculations.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
 </html>
