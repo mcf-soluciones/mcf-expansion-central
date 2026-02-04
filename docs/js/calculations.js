@@ -25,20 +25,24 @@ const Calculations = (() => {
     const annualDepr       = inp.annual_depreciation;
     const terminalValueIn  = inp.terminal_value;
     const taxToggle        = inp.tax_toggle;
+    const salesIncreasePct = inp.sales_increase_rate || 0;
+    const rentIncreasePct  = inp.rent_increase_rate || 0;
 
     const downPayment = purchasePrice * (downPaymentPct / 100);
     const loanAmount  = purchasePrice - downPayment;
     const interestRate = interestRatePct / 100;
     const discountRate = discountRatePct / 100;
+    const salesGrowth  = salesIncreasePct / 100;
+    const rentGrowth   = rentIncreasePct / 100;
 
-    // Annual operating costs
+    // Base annual operating costs (year 1)
     const annualRentTotal  = monthlyRent * 12;
     const annualUtilTotal  = monthlyUtilities * 12;
     const annualFixedTotal = monthlyFixed * 12;
     const totalAnnualCosts = annualRentTotal + annualUtilTotal + annualMaint +
                              annualFixedTotal + annualDepr + annualCorp;
 
-    // Loan amortisation
+    // Loan amortisation (handle 0% interest rate)
     let monthlyPayment = 0;
     let annualDebtService = 0;
     let monthlyRate = 0;
@@ -47,33 +51,55 @@ const Calculations = (() => {
     if (loanAmount > 0) {
       monthlyRate = interestRate / 12;
       numPayments = loanTerm * 12;
-      monthlyPayment = loanAmount *
-        (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) /
-        (Math.pow(1 + monthlyRate, numPayments) - 1);
+      if (interestRate === 0) {
+        monthlyPayment = loanAmount / numPayments;
+      } else {
+        monthlyPayment = loanAmount *
+          (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) /
+          (Math.pow(1 + monthlyRate, numPayments) - 1);
+      }
       annualDebtService = monthlyPayment * 12;
     }
 
-    // Tax (Spanish IVA 21% + IRPF 25%)
-    const irpfTax = (annualSales * (1 - 0.21) - totalAnnualCosts * (1 - 0.21)) * 0.25;
-    const ivaNet  = (annualSales * 0.21) - (totalAnnualCosts - annualDepr) * 0.21;
-    const taxImpact = taxToggle ? (ivaNet + irpfTax) : 0;
-
-    const annualNetIncome = annualSales - totalAnnualCosts - taxImpact;
-    const annualCashFlow  = annualNetIncome - annualDebtService;
-
-    // Cash flow vector: year 0 = –down payment, years 1..n = annual CF
+    // Build per-year cash flows with YoY growth
     const cashFlows = [-downPayment];
-    for (let i = 0; i < analysisPeriod; i++) {
-      cashFlows.push(annualCashFlow);
+    let firstYearCashFlow = 0;
+    let firstYearNetIncome = 0;
+
+    for (let yr = 1; yr <= analysisPeriod; yr++) {
+      const yrSales = annualSales * Math.pow(1 + salesGrowth, yr - 1);
+      const yrRent  = annualRentTotal * Math.pow(1 + rentGrowth, yr - 1);
+      const yrCosts = yrRent + annualUtilTotal + annualMaint +
+                      annualFixedTotal + annualDepr + annualCorp;
+
+      // Tax (Spanish IVA 21% + IRPF 25%)
+      const irpfTax = (yrSales * (1 - 0.21) - yrCosts * (1 - 0.21)) * 0.25;
+      const ivaNet  = (yrSales * 0.21) - (yrCosts - annualDepr) * 0.21;
+      const taxImpact = taxToggle ? (ivaNet + irpfTax) : 0;
+
+      const netIncome = yrSales - yrCosts - taxImpact;
+      const cf = netIncome - annualDebtService;
+      cashFlows.push(cf);
+
+      if (yr === 1) {
+        firstYearCashFlow = cf;
+        firstYearNetIncome = netIncome;
+      }
     }
 
     // Terminal value (subtract remaining loan balance if loan extends beyond analysis)
     let terminalValue = terminalValueIn;
     if (loanAmount > 0 && loanTerm > analysisPeriod) {
-      const remainingBalance = loanAmount *
-        (Math.pow(1 + monthlyRate, numPayments) - Math.pow(1 + monthlyRate, analysisPeriod * 12)) /
-        (Math.pow(1 + monthlyRate, numPayments) - 1);
-      terminalValue = terminalValueIn - remainingBalance;
+      if (interestRate === 0) {
+        const paidMonths = analysisPeriod * 12;
+        const remainingBalance = loanAmount - monthlyPayment * paidMonths;
+        terminalValue = terminalValueIn - Math.max(0, remainingBalance);
+      } else {
+        const remainingBalance = loanAmount *
+          (Math.pow(1 + monthlyRate, numPayments) - Math.pow(1 + monthlyRate, analysisPeriod * 12)) /
+          (Math.pow(1 + monthlyRate, numPayments) - 1);
+        terminalValue = terminalValueIn - remainingBalance;
+      }
     }
     cashFlows[cashFlows.length - 1] += terminalValue;
 
@@ -86,9 +112,9 @@ const Calculations = (() => {
     // IRR (bisection method replicating R's uniroot on [-0.99, 5])
     const irr = computeIRR(cashFlows);
 
-    // Other metrics
-    const cashOnCash = downPayment > 0 ? (annualCashFlow / downPayment) : 0;
-    const paybackPeriod = annualCashFlow !== 0 ? (downPayment / annualCashFlow) : NaN;
+    // Other metrics (use year-1 figures for cash-on-cash and payback)
+    const cashOnCash = downPayment > 0 ? (firstYearCashFlow / downPayment) : 0;
+    const paybackPeriod = firstYearCashFlow > 0 ? (downPayment / firstYearCashFlow) : NaN;
     const totalProfit = cashFlows.slice(1).reduce((s, v) => s + v, 0);
     const roi = downPayment > 0 ? (totalProfit / downPayment) * 100 : 0;
 
@@ -98,8 +124,8 @@ const Calculations = (() => {
       cashOnCash,
       paybackPeriod,
       roi,
-      annualCashFlow,
-      annualNetIncome,
+      annualCashFlow: firstYearCashFlow,
+      annualNetIncome: firstYearNetIncome,
       debtService: annualDebtService,
       cashFlows,
       assumptions: {
@@ -119,7 +145,9 @@ const Calculations = (() => {
         annual_corp: annualCorp,
         annual_depreciation: annualDepr,
         terminal_value: terminalValueIn,
-        tax_toggle: taxToggle
+        tax_toggle: taxToggle,
+        sales_increase_rate: salesIncreasePct,
+        rent_increase_rate: rentIncreasePct
       }
     };
   }
@@ -184,6 +212,11 @@ const Calculations = (() => {
 
   /* ---- IRR via bisection (mirrors R uniroot on [-0.99, 5]) ---- */
   function computeIRR(cashFlows) {
+    // Guard: if all cash flows are non-positive or non-negative, no IRR exists
+    const hasPos = cashFlows.some(v => v > 0);
+    const hasNeg = cashFlows.some(v => v < 0);
+    if (!hasPos || !hasNeg) return null;
+
     function npvAtRate(rate) {
       let s = 0;
       for (let i = 0; i < cashFlows.length; i++) {
@@ -193,8 +226,11 @@ const Calculations = (() => {
     }
 
     let lo = -0.99, hi = 5;
-    const fLo = npvAtRate(lo);
-    const fHi = npvAtRate(hi);
+    let fLo = npvAtRate(lo);
+    let fHi = npvAtRate(hi);
+
+    // Handle NaN/Infinity from extreme discount rates
+    if (!isFinite(fLo) || !isFinite(fHi)) return null;
 
     // If same sign at both ends, no root in interval
     if (fLo * fHi > 0) return null;
@@ -202,9 +238,10 @@ const Calculations = (() => {
     for (let iter = 0; iter < 200; iter++) {
       const mid = (lo + hi) / 2;
       const fMid = npvAtRate(mid);
+      if (!isFinite(fMid)) return null;
       if (Math.abs(fMid) < 1e-8) return mid;
       if (fLo * fMid < 0) { hi = mid; }
-      else { lo = mid; }
+      else { lo = mid; fLo = fMid; }
     }
     return (lo + hi) / 2;
   }
