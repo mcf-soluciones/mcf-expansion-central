@@ -13,19 +13,22 @@
       purchase_price: 60000, annual_sales: 50000, down_payment_pct: 100,
       interest_rate: 5, loan_term: 5, monthly_rent: 800, monthly_utilities: 1000,
       monthly_fixed: 1000, annual_maintenance: 2500, annual_corp: 100,
-      annual_depreciation: 3000, discount_rate: 6, analysis_period: 5, terminal_value: 25000
+      annual_depreciation: 3000, discount_rate: 6, analysis_period: 5, terminal_value: 25000,
+      sales_increase_rate: 0, rent_increase_rate: 0
     },
     Usera: {
       purchase_price: 81000, annual_sales: 78000, down_payment_pct: 100,
       interest_rate: 5, loan_term: 5, monthly_rent: 650, monthly_utilities: 1100,
       monthly_fixed: 400, annual_maintenance: 2000, annual_corp: 300,
-      annual_depreciation: 2000, discount_rate: 6, analysis_period: 5, terminal_value: 23000
+      annual_depreciation: 2000, discount_rate: 6, analysis_period: 5, terminal_value: 23000,
+      sales_increase_rate: 0, rent_increase_rate: 0
     },
     Hortaleza: {
       purchase_price: 55000, annual_sales: 60000, down_payment_pct: 100,
       interest_rate: 5, loan_term: 5, monthly_rent: 1030, monthly_utilities: 1000,
       monthly_fixed: 500, annual_maintenance: 1600, annual_corp: 400,
-      annual_depreciation: 1800, discount_rate: 6, analysis_period: 5, terminal_value: 17000
+      annual_depreciation: 1800, discount_rate: 6, analysis_period: 5, terminal_value: 17000,
+      sales_increase_rate: 0, rent_increase_rate: 0
     }
   };
 
@@ -59,7 +62,7 @@
     "purchase_price", "monthly_rent", "monthly_utilities", "monthly_fixed",
     "annual_maintenance", "annual_corp", "annual_depreciation", "terminal_value"
   ];
-  const SLIDERS_PCT = ["down_payment_pct", "interest_rate", "discount_rate", "inflation_rate", "price_increase_rate"];
+  const SLIDERS_PCT = ["down_payment_pct", "interest_rate", "discount_rate", "inflation_rate", "price_increase_rate", "sales_increase_rate", "rent_increase_rate"];
   const SLIDERS_PLAIN = ["loan_term", "analysis_period"];
 
   // Stored results for download / cross-tab
@@ -162,7 +165,9 @@
       analysis_period:    Number($("analysis_period").value),
       terminal_value:     Number($("terminal_value").value),
       inflation_rate:     Number($("inflation_rate").value),
-      price_increase_rate:Number($("price_increase_rate").value)
+      price_increase_rate:Number($("price_increase_rate").value),
+      sales_increase_rate:Number($("sales_increase_rate").value),
+      rent_increase_rate: Number($("rent_increase_rate").value)
     };
   }
 
@@ -204,8 +209,8 @@
    * =========================== */
   function renderMetricsTable(r) {
     const fmt = Calculations.fmtEur;
-    const irrStr = r.irr === null ? "Unable to calculate" : (r.irr * 100).toFixed(2) + "%";
-    const payback = isNaN(r.paybackPeriod) || !isFinite(r.paybackPeriod)
+    const irrStr = r.irr === null ? "N/A (negative cash flows)" : (r.irr * 100).toFixed(2) + "%";
+    const payback = isNaN(r.paybackPeriod) || !isFinite(r.paybackPeriod) || r.paybackPeriod < 0
       ? "Never"
       : r.paybackPeriod.toFixed(2) + " years";
 
@@ -266,6 +271,8 @@
       `• Analysis Period: ${a.analysis_period} years`,
       `• Taxes: ${a.tax_toggle ? " yes" : " no"}`,
       `• Terminal Value ${f(a.terminal_value)}€`,
+      `• Annual Sales Increase: ${(a.sales_increase_rate || 0).toFixed(1)}%`,
+      `• Annual Rent Increase: ${(a.rent_increase_rate || 0).toFixed(1)}%`,
       "",
       "Note: This analysis assumes consistent annual performance and does not account for",
       "inflation, market changes, or unexpected events. Results should be used as a guide",
